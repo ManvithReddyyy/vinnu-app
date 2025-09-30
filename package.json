@@ -1,0 +1,17 @@
+{
+  "name": "vinnu",
+  "version": "1.0.0",
+  "description": "Music playlist sharing app",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "concurrently \"cd backend && npm start\" \"cd frontend && npm run dev\"",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "server": "cd backend && npm start",
+    "client": "cd frontend && npm run dev"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
