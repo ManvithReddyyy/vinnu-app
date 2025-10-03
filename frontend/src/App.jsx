@@ -3,28 +3,54 @@ import './styles.css';
 import Dashboard from './Dashboard.jsx';
 import Navbar from './Navbar.jsx';
 import HomePage from './HomePage.jsx';
+import UserProfile from './UserProfile.jsx';
 import FAB from './FAB.jsx';
 import CreatePlaylistModal from './CreatePlaylistModal.jsx';
 import PlaylistDetailModal from './PlaylistDetailModal.jsx';
 
-
 // --- API base ---
 function getApiBase() {
+  if (import.meta.env.DEV) {
+    // Check if we're accessing via IP (mobile)
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return 'http://192.168.0.105:5000';
+    }
+    return ''; // Use proxy for localhost
+  }
   const env = import.meta.env.VITE_API_URL;
-  if (env) return env;
-  const host = window.location.hostname;
-  const protocol = window.location.protocol;
-  return `${protocol}//${host}:5000`;
+  if (env && /^https?:\/\/.+/.test(env)) return env;
+  return 'http://localhost:5000';
 }
+
+// Add this after getApiBase function
+function getImageUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  
+  // Check if we're on mobile (accessing via IP)
+  if (window.location.hostname === '192.168.0.105') {
+    return `http://192.168.0.105:5000${path}`;
+  }
+  
+  return `http://localhost:5000${path}`;
+}
+
 
 // --- Register Form ---
 function RegisterForm({ onNavigate }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', username: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState({});
 
-  const updateField = (e) => {
+  const updateField = e => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
   };
@@ -41,8 +67,9 @@ function RegisterForm({ onNavigate }) {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
+    if (submitting) return;
     setMessage(null);
     if (!validate()) return;
     setSubmitting(true);
@@ -50,7 +77,8 @@ function RegisterForm({ onNavigate }) {
       const res = await fetch(`${getApiBase()}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        credentials: 'include',
+        body: JSON.stringify(form)
       });
       const data = await res.json();
       if (!res.ok) {
@@ -58,10 +86,18 @@ function RegisterForm({ onNavigate }) {
         else setMessage(data?.message || 'Registration failed');
       } else {
         setMessage('Registered successfully! Redirecting to login…');
-        setForm({ firstName: '', lastName: '', username: '', email: '', password: '', confirmPassword: '' });
+        setForm({
+          firstName: '',
+          lastName: '',
+          username: '',
+          email: '',
+          password: '',
+          confirmPassword: ''
+        });
         setTimeout(() => onNavigate('login'), 1500);
       }
     } catch (err) {
+      console.error('Registration error:', err);
       setMessage('Network error');
     } finally {
       setSubmitting(false);
@@ -77,34 +113,85 @@ function RegisterForm({ onNavigate }) {
         <form onSubmit={handleSubmit}>
           <div className="grid">
             <div>
-              <label>First name</label>
-              <input name="firstName" value={form.firstName} onChange={updateField} className={errors.firstName ? 'error' : ''} />
-              {errors.firstName && <div className="error-text">{errors.firstName}</div>}
+              <label htmlFor="firstName">First name</label>
+              <input
+                id="firstName"
+                name="firstName"
+                value={form.firstName}
+                onChange={updateField}
+                className={errors.firstName ? 'error' : ''}
+                aria-invalid={!!errors.firstName}
+                aria-describedby={errors.firstName ? 'firstName-error' : undefined}
+              />
+              {errors.firstName && <div id="firstName-error" className="error-text">{errors.firstName}</div>}
             </div>
             <div>
-              <label>Last name</label>
-              <input name="lastName" value={form.lastName} onChange={updateField} className={errors.lastName ? 'error' : ''} />
-              {errors.lastName && <div className="error-text">{errors.lastName}</div>}
+              <label htmlFor="lastName">Last name</label>
+              <input
+                id="lastName"
+                name="lastName"
+                value={form.lastName}
+                onChange={updateField}
+                className={errors.lastName ? 'error' : ''}
+                aria-invalid={!!errors.lastName}
+                aria-describedby={errors.lastName ? 'lastName-error' : undefined}
+              />
+              {errors.lastName && <div id="lastName-error" className="error-text">{errors.lastName}</div>}
             </div>
             <div className="full">
-              <label>@Username</label>
-              <input name="username" value={form.username} onChange={updateField} className={errors.username ? 'error' : ''} />
-              {errors.username && <div className="error-text">{errors.username}</div>}
+              <label htmlFor="username">@Username</label>
+              <input
+                id="username"
+                name="username"
+                value={form.username}
+                onChange={updateField}
+                className={errors.username ? 'error' : ''}
+                aria-invalid={!!errors.username}
+                aria-describedby={errors.username ? 'username-error' : undefined}
+              />
+              {errors.username && <div id="username-error" className="error-text">{errors.username}</div>}
             </div>
             <div className="full">
-              <label>Email</label>
-              <input name="email" type="email" value={form.email} onChange={updateField} className={errors.email ? 'error' : ''} />
-              {errors.email && <div className="error-text">{errors.email}</div>}
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={updateField}
+                className={errors.email ? 'error' : ''}
+                aria-invalid={!!errors.email}
+                aria-describedby={errors.email ? 'email-error' : undefined}
+              />
+              {errors.email && <div id="email-error" className="error-text">{errors.email}</div>}
             </div>
             <div>
-              <label>Password</label>
-              <input name="password" type="password" value={form.password} onChange={updateField} className={errors.password ? 'error' : ''} />
-              {errors.password && <div className="error-text">{errors.password}</div>}
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                value={form.password}
+                onChange={updateField}
+                className={errors.password ? 'error' : ''}
+                aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? 'password-error' : undefined}
+              />
+              {errors.password && <div id="password-error" className="error-text">{errors.password}</div>}
             </div>
             <div>
-              <label>Confirm Password</label>
-              <input name="confirmPassword" type="password" value={form.confirmPassword} onChange={updateField} className={errors.confirmPassword ? 'error' : ''} />
-              {errors.confirmPassword && <div className="error-text">{errors.confirmPassword}</div>}
+              <label htmlFor="confirmPassword">Confirm Password</label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                value={form.confirmPassword}
+                onChange={updateField}
+                className={errors.confirmPassword ? 'error' : ''}
+                aria-invalid={!!errors.confirmPassword}
+                aria-describedby={errors.confirmPassword ? 'confirmPassword-error' : undefined}
+              />
+              {errors.confirmPassword && <div id="confirmPassword-error" className="error-text">{errors.confirmPassword}</div>}
             </div>
             <div className="full" style={{ marginTop: 6 }}>
               <button type="submit" disabled={submitting}>{submitting ? 'Registering…' : 'Create account'}</button>
@@ -141,21 +228,30 @@ function LoginForm({ onNavigate, onLoginSuccess }) {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (submitting) return;
     setMessage(null);
     if (!validate()) return;
     setSubmitting(true);
     try {
+      console.log('🔐 Attempting login...');
       const res = await fetch(`${getApiBase()}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(form),
+        body: JSON.stringify(form)
       });
       const data = await res.json();
-      if (!res.ok) setMessage(data?.message || 'Login failed');
-      else onLoginSuccess(data);
+      if (!res.ok) {
+        console.error('❌ Login failed:', data?.message);
+        if (data?.field) setErrors(prev => ({ ...prev, [data.field]: data.message }));
+        else setMessage(data?.message || 'Login failed');
+      } else {
+        console.log('✅ Login successful:', data);
+        onLoginSuccess(data);
+      }
     } catch (err) {
-      setMessage('Network error');
+      console.error('❌ Network error:', err);
+      setMessage('Network error - check console for details');
     } finally {
       setSubmitting(false);
     }
@@ -170,14 +266,31 @@ function LoginForm({ onNavigate, onLoginSuccess }) {
         <form onSubmit={handleSubmit}>
           <div className="grid">
             <div className="full">
-              <label>Email or Username</label>
-              <input name="identifier" value={form.identifier} onChange={updateField} className={errors.identifier ? 'error' : ''} />
-              {errors.identifier && <div className="error-text">{errors.identifier}</div>}
+              <label htmlFor="identifier">Email or Username</label>
+              <input
+                id="identifier"
+                name="identifier"
+                value={form.identifier}
+                onChange={updateField}
+                className={errors.identifier ? 'error' : ''}
+                aria-invalid={!!errors.identifier}
+                aria-describedby={errors.identifier ? 'identifier-error' : undefined}
+              />
+              {errors.identifier && <div id="identifier-error" className="error-text">{errors.identifier}</div>}
             </div>
             <div className="full">
-              <label>Password</label>
-              <input name="password" type="password" value={form.password} onChange={updateField} className={errors.password ? 'error' : ''} />
-              {errors.password && <div className="error-text">{errors.password}</div>}
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                value={form.password}
+                onChange={updateField}
+                className={errors.password ? 'error' : ''}
+                aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? 'password-error' : undefined}
+              />
+              {errors.password && <div id="password-error" className="error-text">{errors.password}</div>}
             </div>
             <div className="full" style={{ marginTop: 6 }}>
               <button type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
@@ -194,97 +307,215 @@ function LoginForm({ onNavigate, onLoginSuccess }) {
 
 // --- Main App ---
 export default function App() {
-  const [view, setView] = useState('loading');
-  const [user, setUser] = useState(null);
+  const [view, setView] = useState(() => {
+    return localStorage.getItem('currentView') || 'loading';
+  });
   
+  const [user, setUser] = useState(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState(null);
-  const [viewingPlaylist, setViewingPlaylist] = useState(null); // Detail modal state
+  const [viewingPlaylist, setViewingPlaylist] = useState(null);
+  const [viewingUserProfile, setViewingUserProfile] = useState(null); // NEW
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const triggerRefresh = () => {
-    console.log('%cCheckpoint 1: triggerRefresh was called in App.jsx', 'color: lime; font-weight: bold;');
-    setRefreshKey(prev => prev + 1);
-  };
+  const handleNavigate = (newView) => {
+  console.log('🧭 Navigating to:', newView);
+  setViewingUserProfile(null); // Close user profile
+  setViewingPlaylist(null);     // Close playlist modal
+  setView(newView);
+};
 
-  const handleOpenEditModal = (playlist) => setEditingPlaylist(playlist);
-  const handleViewPlaylist = (playlist) => setViewingPlaylist(playlist); // Open detail modal
-
-  const handleModalClose = () => {
-    setIsCreateModalOpen(false);
-    setEditingPlaylist(null);
-  };
-
-  const handleModalSuccess = () => triggerRefresh();
-
-  async function checkSession() {
-    try {
-      const res = await fetch(`${getApiBase()}/api/auth/me`, { credentials: 'include' });
-      if (res.ok) setUser(await res.json());
-      else setUser(null);
-    } catch { setUser(null); }
-    setView('home');
-  }
-
-  useEffect(() => { checkSession(); }, []);
   useEffect(() => {
-    // This will run only when refreshKey changes, confirming the state update
-    if (refreshKey > 0) { // Avoid logging on initial load
-      console.log(`%cCheckpoint 2: refreshKey in App.jsx was updated to: ${refreshKey}`, 'color: cyan; font-weight: bold;');
+    if (view !== 'loading') {
+      localStorage.setItem('currentView', view);
+      console.log('💾 Saved current view:', view);
     }
-  }, [refreshKey]);
+  }, [view]);
+
+  const triggerRefresh = () => setRefreshKey(prev => prev + 1);
+  const handleOpenEditModal = playlist => setEditingPlaylist(playlist);
+  const handleViewPlaylist = playlist => setViewingPlaylist(playlist);
+  const handleModalClose = () => { setIsCreateModalOpen(false); setEditingPlaylist(null); };
+  const handleModalSuccess = () => triggerRefresh();
+  
+  // NEW: Handler for viewing user profiles
+const handleViewUserProfile = (username) => {
+  console.log('👤 Viewing user profile:', username);
+  setViewingUserProfile(username);
+  setViewingPlaylist(null); // Close any open playlist modal
+};
+
+
+  // Check session on mount
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        console.log('🔍 Checking session...');
+        const res = await fetch(`${getApiBase()}/api/auth/me`, { 
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log('📡 Session check status:', res.status);
+        
+        if (res.ok) {
+          const userData = await res.json();
+          console.log('✅ User authenticated:', userData.username);
+          setUser(userData);
+          
+          const savedView = localStorage.getItem('currentView');
+          if (savedView && savedView !== 'loading' && savedView !== 'login' && savedView !== 'register') {
+            console.log('🔄 Restoring view:', savedView);
+            setView(savedView);
+          } else {
+            setView('home');
+          }
+        } else {
+          console.log('❌ No valid session');
+          setUser(null);
+          setView('home');
+        }
+      } catch (error) {
+        console.error('❌ Session check failed:', error);
+        setUser(null);
+        setView('home');
+      }
+    }
+
+    checkSession();
+  }, []);
 
   async function logout() {
-    try { await fetch(`${getApiBase()}/api/auth/logout`, { method: 'POST', credentials: 'include' }); } catch {}
-    setUser(null);
-    setView('home');
+  try { 
+    await fetch(`${getApiBase()}/api/auth/logout`, { 
+      method: 'POST', 
+      credentials: 'include' 
+    }); 
+    console.log('✅ Logged out successfully');
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+  }
+  setUser(null);
+  setViewingUserProfile(null); // Clear user profile view
+  setViewingPlaylist(null);    // Clear playlist view
+  localStorage.removeItem('currentView');
+  setView('home');
+}
+
+  function handleLogin(userData) { 
+    console.log('🎉 Login handler called with:', userData);
+    setUser(userData);
+    setView('dashboard');
+  }
+  
+  function onUserUpdate(updatedUser) { 
+    console.log('🔄 User update requested');
+    setUser(prevUser => {
+      const prevStr = JSON.stringify(prevUser);
+      const newStr = JSON.stringify(updatedUser);
+      
+      if (prevStr === newStr) {
+        console.log('⏭️ Skipping user update - no changes detected');
+        return prevUser;
+      }
+      
+      console.log('✅ User state updated with new data');
+      return updatedUser;
+    });
   }
 
-  function onUserUpdate(u) { setUser(u); }
-  function handleLogin(userData) { setUser(userData); setView('dashboard'); }
-
-  const renderContent = () => {
-    const pageProps = {
-      user,
-      refreshKey,
-      onEditPlaylist: handleOpenEditModal,
-      onPlaylistDeleted: triggerRefresh,
-      onViewPlaylist: handleViewPlaylist,
-    };
-
-    switch (view) {
-      case 'home':
-        return <HomePage {...pageProps} />;
-      case 'dashboard':
-        return user ? <Dashboard {...pageProps} initialUser={user} onLogout={logout} onUser={onUserUpdate} /> : <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
-      case 'register': return <RegisterForm onNavigate={setView} />;
-      case 'login': return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
-      case 'loading': return <div className="centered-container"><p>Loading...</p></div>;
-      default: return <HomePage {...pageProps} />;
+const renderContent = () => {
+  // Don't let viewing user profile override view state
+  // Only show user profile if we're on home or dashboard view
+  if (viewingUserProfile && (view === 'home' || view === 'dashboard')) {
+    if (!user) {
+      return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
     }
+    return (
+      <UserProfile 
+        username={viewingUserProfile}
+        onBack={() => setViewingUserProfile(null)}
+        onViewPlaylist={handleViewPlaylist}
+        onViewUserProfile={handleViewUserProfile}
+      />
+    );
+  }
+
+  const pageProps = {
+    user,
+    refreshKey,
+    onEditPlaylist: handleOpenEditModal,
+    onPlaylistDeleted: triggerRefresh,
+    onViewPlaylist: handleViewPlaylist,
+    onViewUserProfile: handleViewUserProfile
   };
+
+  switch (view) {
+    case 'home': 
+      if (!user) {
+        return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
+      }
+      return <HomePage {...pageProps} />;
+      
+    case 'dashboard': 
+      return user ? (
+        <Dashboard 
+          {...pageProps} 
+          initialUser={user} 
+          onLogout={logout} 
+          onUser={onUserUpdate} 
+        />
+      ) : (
+        <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
+      );
+      
+    case 'register': 
+      // Clear user profile when navigating away
+      if (viewingUserProfile) setViewingUserProfile(null);
+      return <RegisterForm onNavigate={setView} />;
+      
+    case 'login': 
+      // Clear user profile when navigating away
+      if (viewingUserProfile) setViewingUserProfile(null);
+      return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
+      
+    case 'loading': 
+      return (
+        <div className="centered-container">
+          <div className="spinner" />
+          <p>Loading...</p>
+        </div>
+      );
+      
+    default: 
+      if (!user) {
+        return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
+      }
+      return <HomePage {...pageProps} />;
+  }
+};
 
   const isCreateEditModalOpen = isCreateModalOpen || !!editingPlaylist;
 
   return (
     <>
-      <Navbar user={user} onNavigate={setView} onLogout={logout} />
+      <Navbar user={user} onNavigate={handleNavigate} onLogout={logout} />
       <main className="main-content">{renderContent()}</main>
-
       {user && <FAB onClick={() => setIsCreateModalOpen(true)} />}
-
       {isCreateEditModalOpen && (
-        <CreatePlaylistModal
-          onClose={handleModalClose}
-          onSuccess={handleModalSuccess}
-          playlistToEdit={editingPlaylist}
+        <CreatePlaylistModal 
+          onClose={handleModalClose} 
+          onSuccess={handleModalSuccess} 
+          playlistToEdit={editingPlaylist} 
         />
       )}
-
       {viewingPlaylist && (
-        <PlaylistDetailModal
-          playlist={viewingPlaylist}
+        <PlaylistDetailModal 
+          playlist={viewingPlaylist} 
           onClose={() => setViewingPlaylist(null)}
+          onViewUserProfile={handleViewUserProfile} // NEW: Pass handler to modal
         />
       )}
     </>

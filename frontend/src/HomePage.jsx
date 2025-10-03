@@ -1,20 +1,25 @@
 import { useEffect, useState } from 'react';
+import api from './api'; 
+import { getImageUrl } from './utils';
 
-const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistDeleted, onViewPlaylist }) {
+export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistDeleted, onViewPlaylist, onViewUserProfile }) {
   const [playlists, setPlaylists] = useState([]);
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState('playlists');
 
   const fetchData = async () => {
     try {
+      console.log('📥 Fetching homepage data...');
       const [playlistsRes, usersRes] = await Promise.all([
-        fetch(`${getApiBase()}/api/playlists`),
-        fetch(`${getApiBase()}/api/users`),
+        api.get('/playlists'),
+        api.get('/users'),
       ]);
-      if (playlistsRes.ok) setPlaylists(await playlistsRes.json());
-      if (usersRes.ok) setUsers(await usersRes.json());
+      
+      console.log('✅ Playlists loaded:', playlistsRes.data.length);
+      console.log('✅ Users loaded:', usersRes.data.length);
+      
+      setPlaylists(playlistsRes.data);
+      setUsers(usersRes.data);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     }
@@ -27,29 +32,33 @@ export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistD
   const handleLike = async (playlistId) => {
     if (!user) return alert('You must be logged in to like a playlist.');
     try {
-      const res = await fetch(`${getApiBase()}/api/playlists/${playlistId}/like`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Failed to like playlist.');
-      const updatedPlaylist = await res.json();
-      setPlaylists(prev => prev.map(p => p._id === playlistId ? updatedPlaylist : p));
+      console.log('❤️ Attempting to like playlist:', playlistId);
+      const res = await api.post(`/playlists/${playlistId}/like`);
+      console.log('✅ Playlist liked successfully');
+      setPlaylists(prev => prev.map(p => p._id === playlistId ? res.data : p));
     } catch (err) {
-      alert(err.message);
+      console.error('❌ Like failed:', err);
+      alert(err.response?.data?.message || 'Failed to like playlist.');
     }
   };
 
   const handleDelete = async (playlistId) => {
     if (!window.confirm("Are you sure you want to delete this playlist?")) return;
     try {
-      const res = await fetch(`${getApiBase()}/api/playlists/${playlistId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error('Failed to delete playlist.');
+      console.log('🗑️ Deleting playlist:', playlistId);
+      await api.delete(`/playlists/${playlistId}`);
+      console.log('✅ Playlist deleted');
       onPlaylistDeleted();
     } catch (err) {
-      alert(err.message);
+      console.error('❌ Delete failed:', err);
+      alert(err.response?.data?.message || 'Failed to delete playlist.');
+    }
+  };
+
+  const handleUserClick = (username) => {
+    console.log('👤 Clicked user:', username);
+    if (onViewUserProfile) {
+      onViewUserProfile(username);
     }
   };
 
@@ -72,19 +81,54 @@ export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistD
               return (
                 <div key={pl._id} className="playlist-card" onClick={() => onViewPlaylist(pl)}>
                   <div className="playlist-cover">
-                    {pl.coverUrl ? <img src={`${getApiBase()}${pl.coverUrl}`} alt={pl.title} /> : <span className="cover-icon">🎵</span>}
+                    {pl.coverUrl ? (
+                      <img src={getImageUrl(pl.coverUrl)} alt={pl.title} />
+                    ) : (
+                      <span className="cover-icon">🎵</span>
+                    )}
                   </div>
                   <div className="playlist-info">
                     <div className="playlist-title">{pl.title}</div>
-                    <div className="playlist-owner">By @{pl.ownerId?.username || '...'}</div>
+                    <div 
+                      className="playlist-owner" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (pl.ownerId?.username) {
+                          handleUserClick(pl.ownerId.username);
+                        }
+                      }}
+                      style={{ 
+                        cursor: pl.ownerId?.username ? 'pointer' : 'default',
+                        transition: 'color 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (pl.ownerId?.username) {
+                          e.target.style.color = '#111827';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.color = '';
+                      }}
+                    >
+                      By @{pl.ownerId?.username || '...'}
+                    </div>
                     <div className="tag-pills-card">
-                      {pl.tags?.slice(0, 3).map(t => (
-                        <span key={t.text} className="tag-pill-card" style={{ backgroundColor: t.color }}>{t.text}</span>
+                      {pl.tags?.slice(0, 3).map((t, idx) => (
+                        <span 
+                          key={idx} 
+                          className="tag-pill-card" 
+                          style={{ backgroundColor: t.color || '#e0e7ff' }}
+                        >
+                          {t.text || t}
+                        </span>
                       ))}
                     </div>
                   </div>
                   <div className="card-actions" onClick={e => e.stopPropagation()}>
-                    <button className={`like-btn ${isLiked ? 'liked' : ''}`} onClick={() => handleLike(pl._id)}>
+                    <button 
+                      className={`like-btn ${isLiked ? 'liked' : ''}`} 
+                      onClick={() => handleLike(pl._id)}
+                    >
                       ♥ {likeCount}
                     </button>
                     {isOwner && (
@@ -105,9 +149,30 @@ export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistD
         <section>
           <div className="home-user-grid">
             {users.map((u) => (
-              <div key={u._id} className="user-card">
+              <div 
+                key={u._id} 
+                className="user-card"
+                onClick={() => handleUserClick(u.username)}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="user-avatar">
-                  {u.avatarUrl ? <img src={`${getApiBase()}${u.avatarUrl}`} alt={u.username} /> : null}
+                  {u.avatarUrl ? (
+                    <img src={getImageUrl(u.avatarUrl)} alt={u.username} />
+                  ) : (
+                    <div className="avatar-placeholder" style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '32px',
+                      fontWeight: '800',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: 'white'
+                    }}>
+                      {u.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                 </div>
                 <span className="user-username">@{u.username}</span>
               </div>
