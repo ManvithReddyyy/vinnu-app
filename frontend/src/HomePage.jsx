@@ -1,17 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 import api from './api'; 
 import { getImageUrl } from './utils';
 
-export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistDeleted, onViewPlaylist, onViewUserProfile }) {
+function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistDeleted, onViewPlaylist, onViewUserProfile }) {
   const [playlists, setPlaylists] = useState([]);
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState('playlists');
+  
+  // Search & Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState('all');
+  const [selectedProvider, setSelectedProvider] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const genres = ['all', 'Pop', 'Rock', 'Hip-Hop', 'Electronic', 'Jazz', 'Classical', 'R&B', 'Country', 'Indie'];
+  const providers = ['all', 'spotify', 'youtube-music', 'apple-music', 'soundcloud'];
 
   const fetchData = async () => {
     try {
       console.log('📥 Fetching homepage data...');
+      setIsSearching(true);
+      
+      // Build search params
+      const params = new URLSearchParams();
+      if (searchQuery) params.append('query', searchQuery);
+      if (selectedGenre !== 'all') params.append('genre', selectedGenre);
+      if (selectedProvider !== 'all') params.append('provider', selectedProvider);
+      params.append('sortBy', sortBy);
+      
       const [playlistsRes, usersRes] = await Promise.all([
-        api.get('/playlists'),
+        api.get(`/playlists/search?${params.toString()}`),
         api.get('/users'),
       ]);
       
@@ -22,12 +41,23 @@ export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistD
       setUsers(usersRes.data);
     } catch (error) {
       console.error("Failed to fetch data:", error);
+    } finally {
+      setIsSearching(false);
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, [refreshKey]);
+  }, [refreshKey, searchQuery, selectedGenre, selectedProvider, sortBy]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedGenre('all');
+    setSelectedProvider('all');
+    setSortBy('newest');
+  };
+
+  const hasActiveFilters = searchQuery || selectedGenre !== 'all' || selectedProvider !== 'all' || sortBy !== 'newest';
 
   const handleLike = async (playlistId) => {
     if (!user) return alert('You must be logged in to like a playlist.');
@@ -72,76 +102,156 @@ export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistD
 
       {activeTab === 'playlists' && (
         <section>
-          <div className="home-playlist-grid">
-            {playlists.map((pl) => {
-              const isOwner = user && pl.ownerId?._id === user.id;
-              const isLiked = user && Array.isArray(pl.likes) && pl.likes.includes(user.id);
-              const likeCount = Array.isArray(pl.likes) ? pl.likes.length : 0;
+          {/* Search & Filter Bar */}
+          <div className="search-filter-bar">
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder="Search playlists, users, tags..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+              <span className="search-icon"></span>
+            </div>
 
-              return (
-                <div key={pl._id} className="playlist-card" onClick={() => onViewPlaylist(pl)}>
-                  <div className="playlist-cover">
-                    {pl.coverUrl ? (
-                      <img src={getImageUrl(pl.coverUrl)} alt={pl.title} />
-                    ) : (
-                      <span className="cover-icon">🎵</span>
-                    )}
-                  </div>
-                  <div className="playlist-info">
-                    <div className="playlist-title">{pl.title}</div>
-                    <div 
-                      className="playlist-owner" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (pl.ownerId?.username) {
-                          handleUserClick(pl.ownerId.username);
-                        }
-                      }}
-                      style={{ 
-                        cursor: pl.ownerId?.username ? 'pointer' : 'default',
-                        transition: 'color 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (pl.ownerId?.username) {
-                          e.target.style.color = '#111827';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.color = '';
-                      }}
-                    >
-                      By @{pl.ownerId?.username || '...'}
-                    </div>
-                    <div className="tag-pills-card">
-                      {pl.tags?.slice(0, 3).map((t, idx) => (
-                        <span 
-                          key={idx} 
-                          className="tag-pill-card" 
-                          style={{ backgroundColor: t.color || '#e0e7ff' }}
-                        >
-                          {t.text || t}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="card-actions" onClick={e => e.stopPropagation()}>
-                    <button 
-                      className={`like-btn ${isLiked ? 'liked' : ''}`} 
-                      onClick={() => handleLike(pl._id)}
-                    >
-                      ♥ {likeCount}
-                    </button>
-                    {isOwner && (
-                      <div className="owner-actions">
-                        <button className="edit-btn-card" onClick={() => onEditPlaylist(pl)}>Edit</button>
-                        <button className="delete-btn-card" onClick={() => handleDelete(pl._id)}>Delete</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            <div className="filters-row">
+              <select 
+                value={selectedGenre} 
+                onChange={(e) => setSelectedGenre(e.target.value)}
+                className="filter-select"
+              >
+                {genres.map(g => (
+                  <option key={g} value={g}>
+                    {g === 'all' ? 'All Genres' : g}
+                  </option>
+                ))}
+              </select>
+
+              <select 
+                value={selectedProvider} 
+                onChange={(e) => setSelectedProvider(e.target.value)}
+                className="filter-select"
+              >
+                {providers.map(p => (
+                  <option key={p} value={p}>
+                    {p === 'all' ? 'All Platforms' : p.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+
+              <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value)}
+                className="filter-select"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="most-liked">Most Liked</option>
+                <option value="most-viewed">Most Viewed</option>
+                <option value="most-clicked">Most Clicked</option>
+              </select>
+
+              {hasActiveFilters && (
+                <button onClick={clearFilters} className="clear-filters-btn">
+                  ✕ Clear
+                </button>
+              )}
+            </div>
           </div>
+
+          {isSearching ? (
+            <div className="centered-container">
+              <div className="spinner" />
+              <p>Searching...</p>
+            </div>
+          ) : playlists.length === 0 ? (
+            <div className="empty">
+              <div style={{ fontSize: '3rem', marginBottom: 16 }}>🔍</div>
+              <div>No playlists found</div>
+              {hasActiveFilters && (
+                <button onClick={clearFilters} style={{ marginTop: 12 }}>
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="results-count">
+                Found {playlists.length} playlist{playlists.length !== 1 ? 's' : ''}
+              </div>
+              <div className="home-playlist-grid">
+                {playlists.map((pl) => {
+                  const isOwner = user && pl.ownerId?._id === user.id;
+                  const isLiked = user && Array.isArray(pl.likes) && pl.likes.includes(user.id);
+                  const likeCount = Array.isArray(pl.likes) ? pl.likes.length : 0;
+
+                  return (
+                    <div key={pl._id} className="playlist-card" onClick={() => onViewPlaylist(pl)}>
+                      <div className="playlist-cover">
+                        {pl.coverUrl ? (
+                          <img src={getImageUrl(pl.coverUrl)} alt={pl.title} />
+                        ) : (
+                          <span className="cover-icon">🎵</span>
+                        )}
+                      </div>
+                      <div className="playlist-info">
+                        <div className="playlist-title">{pl.title}</div>
+                        <div 
+                          className="playlist-owner" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (pl.ownerId?.username) {
+                              handleUserClick(pl.ownerId.username);
+                            }
+                          }}
+                          style={{ 
+                            cursor: pl.ownerId?.username ? 'pointer' : 'default',
+                            transition: 'color 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (pl.ownerId?.username) {
+                              e.target.style.color = '#111827';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.color = '';
+                          }}
+                        >
+                          By @{pl.ownerId?.username || '...'}
+                        </div>
+                        <div className="tag-pills-card">
+                          {pl.tags?.slice(0, 3).map((t, idx) => (
+                            <span 
+                              key={idx} 
+                              className="tag-pill-card" 
+                              style={{ backgroundColor: t.color || '#e0e7ff' }}
+                            >
+                              {t.text || t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="card-actions" onClick={e => e.stopPropagation()}>
+                        <button 
+                          className={`like-btn ${isLiked ? 'liked' : ''}`} 
+                          onClick={() => handleLike(pl._id)}
+                        >
+                          ♥ {likeCount}
+                        </button>
+                        {isOwner && (
+                          <div className="owner-actions">
+                            <button className="edit-btn-card" onClick={() => onEditPlaylist(pl)}>Edit</button>
+                            <button className="delete-btn-card" onClick={() => handleDelete(pl._id)}>Delete</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -183,3 +293,5 @@ export default function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistD
     </div>
   );
 }
+
+export default memo(HomePage);

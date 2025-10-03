@@ -4,6 +4,7 @@ import Dashboard from './Dashboard.jsx';
 import Navbar from './Navbar.jsx';
 import HomePage from './HomePage.jsx';
 import UserProfile from './UserProfile.jsx';
+import Friends from './Friends.jsx'; // ADDED
 import FAB from './FAB.jsx';
 import CreatePlaylistModal from './CreatePlaylistModal.jsx';
 import PlaylistDetailModal from './PlaylistDetailModal.jsx';
@@ -34,7 +35,6 @@ function getImageUrl(path) {
   
   return `http://localhost:5000${path}`;
 }
-
 
 // --- Register Form ---
 function RegisterForm({ onNavigate }) {
@@ -315,15 +315,15 @@ export default function App() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState(null);
   const [viewingPlaylist, setViewingPlaylist] = useState(null);
-  const [viewingUserProfile, setViewingUserProfile] = useState(null); // NEW
+  const [viewingUserProfile, setViewingUserProfile] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleNavigate = (newView) => {
-  console.log('🧭 Navigating to:', newView);
-  setViewingUserProfile(null); // Close user profile
-  setViewingPlaylist(null);     // Close playlist modal
-  setView(newView);
-};
+    console.log('🧭 Navigating to:', newView);
+    setViewingUserProfile(null);
+    setViewingPlaylist(null);
+    setView(newView);
+  };
 
   useEffect(() => {
     if (view !== 'loading') {
@@ -338,13 +338,11 @@ export default function App() {
   const handleModalClose = () => { setIsCreateModalOpen(false); setEditingPlaylist(null); };
   const handleModalSuccess = () => triggerRefresh();
   
-  // NEW: Handler for viewing user profiles
-const handleViewUserProfile = (username) => {
-  console.log('👤 Viewing user profile:', username);
-  setViewingUserProfile(username);
-  setViewingPlaylist(null); // Close any open playlist modal
-};
-
+  const handleViewUserProfile = (username) => {
+    console.log('👤 Viewing user profile:', username);
+    setViewingUserProfile(username);
+    setViewingPlaylist(null);
+  };
 
   // Check session on mount
   useEffect(() => {
@@ -388,21 +386,21 @@ const handleViewUserProfile = (username) => {
   }, []);
 
   async function logout() {
-  try { 
-    await fetch(`${getApiBase()}/api/auth/logout`, { 
-      method: 'POST', 
-      credentials: 'include' 
-    }); 
-    console.log('✅ Logged out successfully');
-  } catch (error) {
-    console.error('❌ Logout error:', error);
+    try { 
+      await fetch(`${getApiBase()}/api/auth/logout`, { 
+        method: 'POST', 
+        credentials: 'include' 
+      }); 
+      console.log('✅ Logged out successfully');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+    }
+    setUser(null);
+    setViewingUserProfile(null);
+    setViewingPlaylist(null);
+    localStorage.removeItem('currentView');
+    setView('home');
   }
-  setUser(null);
-  setViewingUserProfile(null); // Clear user profile view
-  setViewingPlaylist(null);    // Clear playlist view
-  localStorage.removeItem('currentView');
-  setView('home');
-}
 
   function handleLogin(userData) { 
     console.log('🎉 Login handler called with:', userData);
@@ -426,76 +424,85 @@ const handleViewUserProfile = (username) => {
     });
   }
 
-const renderContent = () => {
-  // Don't let viewing user profile override view state
-  // Only show user profile if we're on home or dashboard view
-  if (viewingUserProfile && (view === 'home' || view === 'dashboard')) {
-    if (!user) {
-      return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
-    }
-    return (
-      <UserProfile 
-        username={viewingUserProfile}
-        onBack={() => setViewingUserProfile(null)}
-        onViewPlaylist={handleViewPlaylist}
-        onViewUserProfile={handleViewUserProfile}
-      />
-    );
-  }
-
-  const pageProps = {
-    user,
-    refreshKey,
-    onEditPlaylist: handleOpenEditModal,
-    onPlaylistDeleted: triggerRefresh,
-    onViewPlaylist: handleViewPlaylist,
-    onViewUserProfile: handleViewUserProfile
-  };
-
-  switch (view) {
-    case 'home': 
+  const renderContent = () => {
+    // Show user profile overlay if viewing a profile
+    if (viewingUserProfile && (view === 'home' || view === 'dashboard' || view === 'friends')) {
       if (!user) {
         return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
       }
-      return <HomePage {...pageProps} />;
-      
-    case 'dashboard': 
-      return user ? (
-        <Dashboard 
-          {...pageProps} 
-          initialUser={user} 
-          onLogout={logout} 
-          onUser={onUserUpdate} 
-        />
-      ) : (
-        <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
-      );
-      
-    case 'register': 
-      // Clear user profile when navigating away
-      if (viewingUserProfile) setViewingUserProfile(null);
-      return <RegisterForm onNavigate={setView} />;
-      
-    case 'login': 
-      // Clear user profile when navigating away
-      if (viewingUserProfile) setViewingUserProfile(null);
-      return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
-      
-    case 'loading': 
       return (
-        <div className="centered-container">
-          <div className="spinner" />
-          <p>Loading...</p>
-        </div>
+        <UserProfile 
+          username={viewingUserProfile}
+          onBack={() => setViewingUserProfile(null)}
+          onViewPlaylist={handleViewPlaylist}
+          onViewUserProfile={handleViewUserProfile}
+        />
       );
+    }
+
+    const pageProps = {
+      user,
+      refreshKey,
+      onEditPlaylist: handleOpenEditModal,
+      onPlaylistDeleted: triggerRefresh,
+      onViewPlaylist: handleViewPlaylist,
+      onViewUserProfile: handleViewUserProfile
+    };
+
+    switch (view) {
+      case 'home': 
+        if (!user) {
+          return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
+        }
+        return <HomePage {...pageProps} />;
+        
+      case 'dashboard': 
+        return user ? (
+          <Dashboard 
+            {...pageProps} 
+            initialUser={user} 
+            onLogout={logout} 
+            onUser={onUserUpdate} 
+          />
+        ) : (
+          <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
+        );
       
-    default: 
-      if (!user) {
+      // 👇 ADDED FRIENDS ROUTE 👇
+      case 'friends':
+        return user ? (
+          <Friends 
+            user={user}
+            onViewUserProfile={handleViewUserProfile}
+          />
+        ) : (
+          <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
+        );
+      // 👆 END 👆
+        
+      case 'register': 
+        if (viewingUserProfile) setViewingUserProfile(null);
+        return <RegisterForm onNavigate={setView} />;
+        
+      case 'login': 
+        if (viewingUserProfile) setViewingUserProfile(null);
         return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
-      }
-      return <HomePage {...pageProps} />;
-  }
-};
+        
+      case 'loading': 
+        return (
+          <div className="centered-container">
+            <div className="spinner" />
+            <p>Loading...</p>
+          </div>
+        );
+        
+      default: 
+        if (!user) {
+          return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
+        }
+        return <HomePage {...pageProps} />;
+    }
+  };
 
   const isCreateEditModalOpen = isCreateModalOpen || !!editingPlaylist;
 
@@ -515,7 +522,7 @@ const renderContent = () => {
         <PlaylistDetailModal 
           playlist={viewingPlaylist} 
           onClose={() => setViewingPlaylist(null)}
-          onViewUserProfile={handleViewUserProfile} // NEW: Pass handler to modal
+          onViewUserProfile={handleViewUserProfile}
         />
       )}
     </>

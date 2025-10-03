@@ -106,6 +106,32 @@ const userSchema = new mongoose.Schema({
     default: '', 
     maxlength: 160 
   },
+  
+  // 👇 ADD THESE NEW FIELDS 👇
+  // Social profiles (only visible to friends)
+  socialProfiles: {
+    instagram: { type: String, default: '' },
+    twitter: { type: String, default: '' },
+    spotify: { type: String, default: '' },
+    youtube: { type: String, default: '' }
+  },
+  
+  // Friends system
+  friends: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  }],
+  friendRequestsSent: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  }],
+  friendRequestsReceived: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  }],
+  // 👆 END OF NEW FIELDS 👆
+  
+  // Existing fields
   followers: [{ 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User' 
@@ -119,7 +145,7 @@ const userSchema = new mongoose.Schema({
 // THIS LINE IS CRITICAL - DO NOT DELETE!
 const User = mongoose.model('User', userSchema);
 
-// Playlist Schema - COMPLETE DEFINITION
+// Playlist Schema stays the same - no changes needed
 const playlistSchema = new mongoose.Schema({
   ownerId: { 
     type: mongoose.Schema.Types.ObjectId, 
@@ -167,6 +193,7 @@ const playlistSchema = new mongoose.Schema({
 
 // THIS LINE IS CRITICAL - DO NOT DELETE!
 const Playlist = mongoose.model('Playlist', playlistSchema);
+
 
 // --- Auth Helpers ---
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
@@ -395,14 +422,26 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 // --- Profile Routes ---
 app.get('/api/profile', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('_id firstName lastName username email avatarUrl bio');
+    const user = await User.findById(req.userId)
+      .select('_id firstName lastName username email avatarUrl bio socialProfiles friends friendRequestsSent friendRequestsReceived followers following')
+      .populate('friendRequestsReceived', 'username firstName lastName avatarUrl')
+      .lean();
+    
     if (!user) return res.status(404).json({ message: 'Not found' });
+    
+    // Add helpful counts
+    user.friendsCount = user.friends?.length || 0;
+    user.pendingRequestsCount = user.friendRequestsReceived?.length || 0;
+    user.followersCount = user.followers?.length || 0;
+    user.followingCount = user.following?.length || 0;
+    
     return res.json(user);
   } catch (e) {
     console.error('❌ Profile error:', e);
     return res.status(500).json({ message: 'Internal server error' });
   }
 });
+
 
 app.patch('/api/profile', authMiddleware, [
   body('firstName').optional().isString().trim().notEmpty(),
@@ -572,6 +611,374 @@ app.post('/api/playlists/:id/like', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('❌ Like playlist error:', error);
     return res.status(500).json({ message: 'Failed to like playlist' });
+  }
+});
+
+// ==================== FRIEND SYSTEM ROUTES ====================
+
+// Send friend request
+// ==================== FRIEND SYSTEM ROUTES ====================
+
+// Send friend request
+app.post('/api/users/:username/friend-request', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId);
+    const targetUser = await User.findOne({ username: req.params.username.toLowerCase() });
+    
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    if (targetUser._id.equals(currentUser._id)) {
+      return res.status(400).json({ message: 'Cannot send friend request to yourself' });
+    }
+    
+    // Check if already friends
+    if (currentUser.friends.includes(targetUser._id)) {
+      return res.status(400).json({ message: 'Already friends' });
+    }
+    
+    // Check if request already sent
+    if (currentUser.friendRequestsSent.includes(targetUser._id)) {
+      return res.status(400).json({ message: 'Friend request already sent' });
+    }
+    
+    // Check if they already sent you a request (auto-accept)
+    if (currentUser.friendRequestsReceived.includes(targetUser._id)) {
+      // Accept their request automatically
+      currentUser.friends.push(targetUser._id);
+      targetUser.friends.push(currentUser._id);
+      
+      currentUser.friendRequestsReceived = currentUser.friendRequestsReceived.filter(
+        id => !id.equals(targetUser._id)
+      );
+      targetUser.friendRequestsSent = targetUser.friendRequestsSent.filter(
+        id => !id.equals(currentUser._id)
+      );
+      
+      await currentUser.save();
+      await targetUser.save();
+      
+      console.log('✅ Auto-accepted mutual friend request');
+      return res.json({ 
+        message: 'Friend request accepted!',
+        status: 'friends',
+        friendsCount: currentUser.friends.length
+      });
+    }
+    
+    // Send new friend request
+    currentUser.friendRequestsSent.push(targetUser._id);
+    targetUser.friendRequestsReceived.push(currentUser._id);
+    
+    await currentUser.save();
+    await targetUser.save();
+    
+    console.log('✅ Friend request sent');
+    res.json({ 
+      message: 'Friend request sent',
+      status: 'pending'
+    });
+  } catch (error) {
+    console.error('❌ Friend request error:', error);
+    res.status(500).json({ message: 'Failed to send friend request' });
+  }
+});
+
+// Accept friend request
+app.post('/api/users/:username/accept-friend', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId);
+    const requester = await User.findOne({ username: req.params.username.toLowerCase() });
+    
+    if (!requester) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Check if request exists
+    if (!currentUser.friendRequestsReceived.includes(requester._id)) {
+      return res.status(400).json({ message: 'No friend request from this user' });
+    }
+    
+    // Add to friends
+    currentUser.friends.push(requester._id);
+    requester.friends.push(currentUser._id);
+    
+    // Remove from requests
+    currentUser.friendRequestsReceived = currentUser.friendRequestsReceived.filter(
+      id => !id.equals(requester._id)
+    );
+    requester.friendRequestsSent = requester.friendRequestsSent.filter(
+      id => !id.equals(currentUser._id)
+    );
+    
+    await currentUser.save();
+    await requester.save();
+    
+    console.log('✅ Friend request accepted');
+    res.json({ 
+      message: 'Friend request accepted',
+      status: 'friends',
+      friendsCount: currentUser.friends.length
+    });
+  } catch (error) {
+    console.error('❌ Accept friend error:', error);
+    res.status(500).json({ message: 'Failed to accept friend request' });
+  }
+});
+
+// Reject friend request
+app.post('/api/users/:username/reject-friend', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId);
+    const requester = await User.findOne({ username: req.params.username.toLowerCase() });
+    
+    if (!requester) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Remove from requests
+    currentUser.friendRequestsReceived = currentUser.friendRequestsReceived.filter(
+      id => !id.equals(requester._id)
+    );
+    requester.friendRequestsSent = requester.friendRequestsSent.filter(
+      id => !id.equals(currentUser._id)
+    );
+    
+    await currentUser.save();
+    await requester.save();
+    
+    console.log('✅ Friend request rejected');
+    res.json({ message: 'Friend request rejected' });
+  } catch (error) {
+    console.error('❌ Reject friend error:', error);
+    res.status(500).json({ message: 'Failed to reject friend request' });
+  }
+});
+
+// Cancel friend request (if you sent it)
+app.post('/api/users/:username/cancel-friend-request', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId);
+    const targetUser = await User.findOne({ username: req.params.username.toLowerCase() });
+    
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Remove from sent/received
+    currentUser.friendRequestsSent = currentUser.friendRequestsSent.filter(
+      id => !id.equals(targetUser._id)
+    );
+    targetUser.friendRequestsReceived = targetUser.friendRequestsReceived.filter(
+      id => !id.equals(currentUser._id)
+    );
+    
+    await currentUser.save();
+    await targetUser.save();
+    
+    console.log('✅ Friend request cancelled');
+    res.json({ message: 'Friend request cancelled' });
+  } catch (error) {
+    console.error('❌ Cancel friend request error:', error);
+    res.status(500).json({ message: 'Failed to cancel friend request' });
+  }
+});
+
+// Remove friend
+app.post('/api/users/:username/remove-friend', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId);
+    const friend = await User.findOne({ username: req.params.username.toLowerCase() });
+    
+    if (!friend) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Remove from friends
+    currentUser.friends = currentUser.friends.filter(id => !id.equals(friend._id));
+    friend.friends = friend.friends.filter(id => !id.equals(currentUser._id));
+    
+    await currentUser.save();
+    await friend.save();
+    
+    console.log('✅ Friend removed');
+    res.json({ 
+      message: 'Friend removed',
+      friendsCount: currentUser.friends.length
+    });
+  } catch (error) {
+    console.error('❌ Remove friend error:', error);
+    res.status(500).json({ message: 'Failed to remove friend' });
+  }
+});
+
+// Get friend status with a user
+app.get('/api/users/:username/friend-status', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId);
+    const targetUser = await User.findOne({ username: req.params.username.toLowerCase() });
+    
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    let status = 'none';
+    
+    if (currentUser.friends.includes(targetUser._id)) {
+      status = 'friends';
+    } else if (currentUser.friendRequestsSent.includes(targetUser._id)) {
+      status = 'pending';
+    } else if (currentUser.friendRequestsReceived.includes(targetUser._id)) {
+      status = 'received';
+    }
+    
+    res.json({ 
+      status,
+      canSeeSocials: status === 'friends'
+    });
+  } catch (error) {
+    console.error('❌ Friend status error:', error);
+    res.status(500).json({ message: 'Failed to get friend status' });
+  }
+});
+
+// Get pending friend requests
+app.get('/api/friend-requests', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId)
+      .populate('friendRequestsReceived', 'username firstName lastName avatarUrl');
+    
+    res.json(currentUser.friendRequestsReceived);
+  } catch (error) {
+    console.error('❌ Get friend requests error:', error);
+    res.status(500).json({ message: 'Failed to get friend requests' });
+  }
+});
+
+// Get friends list
+app.get('/api/friends', authMiddleware, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.userId)
+      .populate('friends', 'username firstName lastName avatarUrl bio socialProfiles');
+    
+    res.json(currentUser.friends);
+  } catch (error) {
+    console.error('❌ Get friends error:', error);
+    res.status(500).json({ message: 'Failed to get friends' });
+  }
+});
+
+// Update social profiles
+app.patch('/api/profile/socials', authMiddleware, async (req, res) => {
+  try {
+    const { instagram, twitter, spotify, youtube } = req.body;
+    
+    const user = await User.findById(req.userId);
+    
+    user.socialProfiles = {
+      instagram: instagram || '',
+      twitter: twitter || '',
+      spotify: spotify || '',
+      youtube: youtube || ''
+    };
+    
+    await user.save();
+    
+    console.log('✅ Social profiles updated');
+    res.json(user);
+  } catch (error) {
+    console.error('❌ Update socials error:', error);
+    res.status(500).json({ message: 'Failed to update social profiles' });
+  }
+});
+
+
+
+// Search and filter playlists
+app.get('/api/playlists/search', async (req, res) => {
+  try {
+    const { query, genre, provider, sortBy } = req.query;
+    
+    console.log('🔍 Search params:', { query, genre, provider, sortBy });
+    
+    // Build filter object
+    const filter = {};
+    
+    // Text search (title, tags, username)
+    if (query) {
+      filter.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { 'tags.text': { $regex: query, $options: 'i' } }
+      ];
+    }
+    
+    // Genre filter
+    if (genre && genre !== 'all') {
+      filter.genre = genre;
+    }
+    
+    // Provider filter
+    if (provider && provider !== 'all') {
+      filter.provider = provider;
+    }
+    
+    // Build sort object
+    let sort = { createdAt: -1 }; // Default: newest first
+    
+    if (sortBy === 'most-liked') {
+      sort = { likesCount: -1 };
+    } else if (sortBy === 'most-viewed') {
+      sort = { views: -1 };
+    } else if (sortBy === 'most-clicked') {
+      sort = { clicks: -1 };
+    } else if (sortBy === 'oldest') {
+      sort = { createdAt: 1 };
+    }
+    
+    console.log('📋 Filter:', filter);
+    console.log('📊 Sort:', sort);
+    
+    // Fetch playlists with filters
+    let playlists = await Playlist.find(filter)
+      .populate('ownerId', 'username avatarUrl firstName lastName')
+      .sort(sort)
+      .lean();
+    
+    // If searching by username, also filter by username
+    if (query) {
+      const userSearch = playlists.filter(pl => 
+        pl.ownerId?.username?.toLowerCase().includes(query.toLowerCase())
+      );
+      
+      // Combine title/tag matches with username matches (remove duplicates)
+      const titleMatches = playlists.filter(pl =>
+        pl.title.toLowerCase().includes(query.toLowerCase()) ||
+        pl.tags?.some(tag => tag.text?.toLowerCase().includes(query.toLowerCase()))
+      );
+      
+      playlists = [...new Set([...titleMatches, ...userSearch])];
+    }
+    
+    // Add likesCount for sorting
+    playlists = playlists.map(pl => ({
+      ...pl,
+      likesCount: pl.likes?.length || 0
+    }));
+    
+    // Re-sort if needed (for username matches)
+    if (sortBy === 'most-liked') {
+      playlists.sort((a, b) => b.likesCount - a.likesCount);
+    } else if (sortBy === 'most-viewed') {
+      playlists.sort((a, b) => (b.views || 0) - (a.views || 0));
+    }
+    
+    console.log('✅ Found playlists:', playlists.length);
+    
+    res.json(playlists);
+  } catch (error) {
+    console.error('❌ Search error:', error);
+    res.status(500).json({ message: 'Failed to search playlists' });
   }
 });
 

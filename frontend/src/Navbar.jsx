@@ -1,53 +1,47 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
+import api from './api';
 
 export default function Navbar({ user, onNavigate, onLogout }) {
-  // Use anchor tags for simplicity, but in a larger app, you'd use a router library
-  const link = (mode, text) => (
-    <a 
-      href="#" 
-      onClick={(e) => { 
-        e.preventDefault(); 
-        onNavigate(mode); 
-      }}
-    >
-      {text}
-    </a>
-  );
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (user) {
+      loadPendingCount();
+    }
+  }, [user]);
+
+  const loadPendingCount = async () => {
+    try {
+      const res = await api.get('/friend-requests');
+      setPendingCount(res.data.length);
+    } catch (error) {
+      console.error('❌ Failed to load pending requests:', error);
+    }
+  };
 
   return (
     <nav className="navbar">
       <div className="nav-container">
-        <div 
-          className="nav-logo" 
-          onClick={() => onNavigate(user ? 'home' : 'login')}
-          style={{ cursor: 'pointer' }}
-        >
+        <div className="nav-logo" onClick={() => onNavigate('home')}>
           Vinnu
         </div>
-        <div className="nav-links">
-          {user ? (
-            // Logged in - show Home, Dashboard, Logout
-            <>
-              {link('home', 'Home')}
-              {link('dashboard', 'Dashboard')}
-              <a 
-                href="#" 
-                onClick={(e) => { 
-                  e.preventDefault(); 
-                  onLogout(); 
-                }}
-              >
-                Logout
-              </a>
-            </>
-          ) : (
-            // Not logged in - show only Login and Register
-            <>
-              {link('login', 'Login')}
-              {link('register', 'Register')}
-            </>
-          )}
-        </div>
+        
+        {user && (
+          <div className="nav-links">
+            <button onClick={() => onNavigate('home')}>Home</button>
+            <button onClick={() => onNavigate('dashboard')}>Dashboard</button>
+            
+            {/* Friends link with badge */}
+            <button onClick={() => onNavigate('friends')} style={{ position: 'relative' }}>
+              Friends
+              {pendingCount > 0 && (
+                <span className="notification-badge">{pendingCount}</span>
+              )}
+            </button>
+            
+            <button onClick={onLogout}>Logout</button>
+          </div>
+        )}
       </div>
     </nav>
   );
