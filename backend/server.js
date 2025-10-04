@@ -28,7 +28,8 @@
   'http://127.0.0.1:4173',
   'http://192.168.0.105:5173',
   'http://192.168.0.105:4173',
-  'https://vinnu-app.vercel.app' // ✅ Add this
+  'https://vinnu-app.vercel.app',  // ✅ Without slash
+  'https://vinnu-app.vercel.app/'  // ✅ With slash
 ];
 
 
