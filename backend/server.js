@@ -411,16 +411,22 @@ app.post('/api/auth/register', [
     await user.save();
 
     // Send OTP email
-    const emailSent = await sendOTPEmail(email, otp, firstName);
+    // Send OTP email (optional for deployment)
+try {
+  const emailSent = await sendOTPEmail(email, otp, firstName);
+  if (emailSent) {
+    console.log('✅ OTP email sent successfully');
+  }
+} catch (emailError) {
+  console.error('⚠️ Email failed but continuing registration:', emailError);
+}
 
-    if (!emailSent) {
-      // Delete user if email fails
-      await User.deleteOne({ _id: user._id });
-      return res.status(500).json({ 
-        message: 'Failed to send verification email. Please try again.',
-        field: 'email'
-      });
-    }
+// Auto-verify user for now (temporary fix for deployment)
+user.isVerified = true;
+user.verificationOTP = null;
+user.otpExpiry = null;
+await user.save();
+
 
     console.log('✅ User created (unverified):', username);
     console.log('📧 OTP sent:', otp);
@@ -446,32 +452,6 @@ app.post('/api/auth/register', [
     return res.status(500).json({ message: 'Internal server error' });
   }
 });
-
-
-// TEMPORARY - Fix existing users with passwordHash field
-app.get('/api/fix-passwords', async (req, res) => {
-  try {
-    const result = await User.updateMany(
-      { passwordHash: { $exists: true } },
-      [{ 
-        $set: { 
-          password: '$passwordHash'
-        } 
-      },
-      {
-        $unset: 'passwordHash'
-      }]
-    );
-    
-    res.json({ 
-      message: '✅ Fixed password fields!',
-      usersFixed: result.modifiedCount 
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 
   // Send friend request notification email
   async function sendFriendRequestEmail(recipientEmail, senderName, senderUsername, recipientName) {
