@@ -431,7 +431,7 @@ await user.save();
     console.log('✅ User created (unverified):', username);
     console.log('📧 OTP sent:', otp);
 
-    / Auto-verify user for now (temporary fix for deployment)
+    // Auto-verify user for now (temporary fix for deployment)
 user.isVerified = true;
 user.verificationOTP = null;
 user.otpExpiry = null;
