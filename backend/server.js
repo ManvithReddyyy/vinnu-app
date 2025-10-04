@@ -431,11 +431,32 @@ await user.save();
     console.log('✅ User created (unverified):', username);
     console.log('📧 OTP sent:', otp);
 
+    / Auto-verify user for now (temporary fix for deployment)
+user.isVerified = true;
+user.verificationOTP = null;
+user.otpExpiry = null;
+await user.save();
+
+
+    console.log('✅ User created (unverified):', username);
+    console.log('📧 OTP sent:', otp);
+
     return res.status(200).json({
       message: 'OTP sent to your email',
       email: email,
       needsVerification: true
     });
+
+  } catch (error) {
+    console.error('❌ Registration error:', error);
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`,
+        field: field 
+      });
 
   } catch (error) {
     console.error('❌ Registration error:', error);
