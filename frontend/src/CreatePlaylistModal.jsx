@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { CirclePicker } from 'react-color';
 
 const getApiBase = () => import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const getImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${getApiBase()}${url}`;
+};
 
-const GENRES = ['Pop', 'Rock', 'Hip-Hop', 'R&B', 'Indie', 'Electronic', 'Jazz', 'Folk', 'Metal', 'Classical'];
-const PREDEFINED_TAGS = [
-  { text: 'Chill', color: '#3b82f6' },
-  { text: 'Upbeat', color: '#ef4444' },
-  { text: 'Workout', color: '#f97316' },
-  { text: 'Focus', color: '#14b8a6' },
-  { text: 'Party', color: '#8b5cf6' },
+const GENRES = ['Pop', 'Rock', 'Hip-Hop', 'R&B', 'Indie', 'Electronic', 'Jazz', 'Folk', 'Metal', 'Classical', 'Country', 'Blues', 'Reggae'];
+
+const PROVIDERS = [
+  { value: 'spotify', label: 'Spotify', color: '#1DB954' },
+  { value: 'apple-music', label: 'Apple Music', color: '#FC3C44' },
+  { value: 'youtube-music', label: 'YouTube Music', color: '#FF0000' },
+  { value: 'amazon-music', label: 'Amazon Music', color: '#FF9900' },
+  { value: 'soundcloud', label: 'SoundCloud', color: '#FF5500' }
 ];
-const TAG_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
 
 export default function CreatePlaylistModal({ onClose, onSuccess, playlistToEdit }) {
   const isEditMode = !!playlistToEdit;
@@ -23,13 +29,12 @@ export default function CreatePlaylistModal({ onClose, onSuccess, playlistToEdit
     genre: [],
     tags: [],
   });
-  const [customTag, setCustomTag] = useState('');
-  const [customTagColor, setCustomTagColor] = useState(TAG_COLORS[0]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tag, setTag] = useState('');
+  const [color, setColor] = useState('#000000');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Pre-fill form when editing
   useEffect(() => {
     if (isEditMode) {
       setForm({
@@ -41,181 +46,205 @@ export default function CreatePlaylistModal({ onClose, onSuccess, playlistToEdit
         tags: playlistToEdit.tags || [],
       });
     }
-  }, [playlistToEdit, isEditMode]);
+  }, [isEditMode, playlistToEdit]);
 
-  const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleCoverUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+const uploadCover = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setLoading(true);
+  const fd = new FormData();
+  fd.append('cover', file);
+  
+  try {
+    const token = localStorage.getItem('token'); // ✅ ADD THIS
+    
+    const r = await fetch(`${getApiBase()}/api/playlists/cover-upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}` // ✅ ADD THIS
+      },
+      body: fd
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error('Upload failed');
+    set('coverUrl', d.url);
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
-    setIsUploading(true);
-    setError('');
-    const formData = new FormData();
-    formData.append('cover', file);
 
-    try {
-      const res = await fetch(`${getApiBase()}/api/playlists/cover-upload`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Image upload failed.');
-      const data = await res.json();
-      updateField('coverUrl', data.url);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsUploading(false);
+  const addTag = () => {
+    const t = tag.trim();
+    if (t && !form.tags.find(x => x.text === t)) {
+      set('tags', [...form.tags, { text: t, color }]);
+      setTag('');
+      setShowColorPicker(false);
     }
   };
 
-  const toggleSelection = (field, value) => {
-    const current = form[field];
-    const newValue = current.includes(value) ? current.filter(item => item !== value) : [...current, value];
-    updateField(field, newValue);
-  };
+  const removeTag = (t) => set('tags', form.tags.filter(x => x.text !== t));
 
-  const handleTagToggle = (tag) => {
-    const current = form.tags;
-    const isSelected = current.some(t => t.text === tag.text);
-    const newValue = isSelected ? current.filter(t => t.text !== tag.text) : [...current, tag];
-    updateField('tags', newValue);
-  };
+  const submit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+  try {
+    const token = localStorage.getItem('token'); // ✅ ADD THIS
+    
+    const r = await fetch(
+      isEditMode ? `${getApiBase()}/api/playlists/${playlistToEdit._id}` : `${getApiBase()}/api/playlists/create`,
+      {
+        method: isEditMode ? 'PATCH' : 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // ✅ ADD THIS
+        },
+        body: JSON.stringify(form)
+      }
+    );
 
-  const handleAddCustomTag = () => {
-    const trimmed = customTag.trim();
-    if (trimmed && !form.tags.some(t => t.text === trimmed)) {
-      updateField('tags', [...form.tags, { text: trimmed, color: customTagColor }]);
-      setCustomTag('');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError('');
-
-    const endpoint = isEditMode
-      ? `${getApiBase()}/api/playlists/${playlistToEdit._id}`
-      : `${getApiBase()}/api/playlists/create`;
-    const method = isEditMode ? 'PATCH' : 'POST';
-
-    try {
-      const res = await fetch(endpoint, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.errors ? data.errors[0].msg : (data.message || 'Failed to save playlist.'));
-      onSuccess(data);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.message || 'Failed');
+      onSuccess(d);
       onClose();
     } catch (err) {
       setError(err.message);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{isEditMode ? 'Edit Playlist' : 'Create New Playlist'}</h2>
-          <button onClick={onClose} className="close-btn">&times;</button>
-        </div>
-        <form onSubmit={handleSubmit} className="modal-form">
-          {error && <div className="form-error">{error}</div>}
+    <>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h2>{isEditMode ? 'Edit Playlist' : 'New Playlist'}</h2>
+            <button className="close-btn" onClick={onClose}>×</button>
+          </div>
 
-          <div className="form-grid">
-            <div className="form-section cover-uploader">
-              <label>Cover Image</label>
-              <input type="file" id="cover-upload" accept="image/*" onChange={handleCoverUpload} style={{ display: 'none' }} />
-              <label htmlFor="cover-upload" className="cover-upload-box">
-                {isUploading ? 'Uploading...' : form.coverUrl ? <img src={`${getApiBase()}${form.coverUrl}`} alt="Preview" /> : '+ Upload'}
-              </label>
+          <form onSubmit={submit} className="modal-form">
+            {error && <div className="form-error">{error}</div>}
+
+            {/* Cover + Title/URL Grid */}
+            <div className="form-grid">
+              <div className="form-section">
+                <label>Cover Image</label>
+                <input type="file" id="c" accept="image/*" onChange={uploadCover} style={{ display: 'none' }} />
+                <label htmlFor="c" className="cover-upload-box">
+                  {loading ? '...' : form.coverUrl ? <img src={getImageUrl(form.coverUrl)} alt="Cover" /> : <span>+</span>}
+                </label>
+              </div>
+
+              <div className="form-section">
+                <label>Title</label>
+                <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="Playlist title" required />
+                
+                <label style={{ marginTop: '1rem' }}>Playlist URL</label>
+                <input type="url" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://..." required />
+              </div>
             </div>
 
+            {/* Provider Buttons */}
             <div className="form-section">
-              <label htmlFor="title">Playlist Name</label>
-              <input id="title" type="text" value={form.title} onChange={e => updateField('title', e.target.value)} required />
-
-              <label htmlFor="url">Playlist URL</label>
-              <input id="url" type="url" value={form.url} onChange={e => updateField('url', e.target.value)} required />
-
-              <label>Application</label>
-              <div className="provider-selector">
-                {['spotify', 'apple-music', 'youtube-music', 'amazon-music'].map(p => (
+              <label>Music Platform</label>
+              <div className="provider-buttons">
+                {PROVIDERS.map(p => (
                   <button
                     type="button"
-                    key={p}
-                    className={`provider-btn ${form.provider === p ? 'active' : ''}`}
-                    onClick={() => updateField('provider', p)}
+                    key={p.value}
+                    className={`provider-btn ${form.provider === p.value ? 'active' : ''}`}
+                    style={{ 
+                      backgroundColor: form.provider === p.value ? p.color : '#f3f4f6',
+                      color: form.provider === p.value ? '#fff' : '#374151'
+                    }}
+                    onClick={() => set('provider', p.value)}
                   >
-                    {p.replace('-', ' ')}
+                    {p.label}
                   </button>
                 ))}
               </div>
             </div>
-          </div>
 
-          <div className="form-section">
-            <label>Genre (Optional)</label>
-            <div className="button-group">
-              {GENRES.map(g => (
-                <button type="button" key={g} className={`toggle-btn ${form.genre.includes(g) ? 'active' : ''}`} onClick={() => toggleSelection('genre', g)}>
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-section">
-            <label>Tags (Optional)</label>
-            <div className="button-group">
-              {PREDEFINED_TAGS.map(t => (
-                <button
-                  type="button"
-                  key={t.text}
-                  className={`toggle-btn ${form.tags.some(ft => ft.text === t.text) ? 'active' : ''}`}
-                  onClick={() => handleTagToggle(t)}
-                >
-                  {t.text}
-                </button>
-              ))}
-            </div>
-
-            <div className="custom-tag-creator">
-              <input type="text" placeholder="Add custom tag..." value={customTag} onChange={e => setCustomTag(e.target.value)} />
-              <div className="color-picker">
-                {TAG_COLORS.map(c => (
-                  <div
-                    key={c}
-                    className={`color-dot ${customTagColor === c ? 'selected' : ''}`}
-                    style={{ background: c }}
-                    onClick={() => setCustomTagColor(c)}
-                  ></div>
+            {/* Genre Dropdown */}
+            <div className="form-section">
+              <label>Genre <span className="optional">(Optional)</span></label>
+              <select 
+                value={form.genre[0] || ''} 
+                onChange={e => set('genre', e.target.value ? [e.target.value] : [])}
+                style={{ color: '#111827' }}
+              >
+                <option value="">Select genre</option>
+                {GENRES.map(g => (
+                  <option key={g} value={g}>{g}</option>
                 ))}
+              </select>
+            </div>
+
+            {/* Tags with Color Wheel */}
+            <div className="form-section">
+              <label>Tags <span className="optional">(Optional)</span></label>
+              <div className="tag-input-group">
+                <input 
+                  type="text" 
+                  className="tag-text-input"
+                  placeholder="Enter tag name" 
+                  value={tag} 
+                  onChange={e => setTag(e.target.value)} 
+                />
+                <button 
+                  type="button" 
+                  className="color-wheel-btn"
+                  style={{ backgroundColor: color }}
+                  onClick={() => setShowColorPicker(true)}
+                >
+                  🎨
+                </button>
+                <button type="button" className="tag-add-btn" onClick={addTag}>Add Tag</button>
               </div>
-              <button type="button" onClick={handleAddCustomTag}>Add</button>
+              {form.tags.length > 0 && (
+                <div className="tag-pills">
+                  {form.tags.map(t => (
+                    <span key={t.text} className="tag-pill" style={{ backgroundColor: t.color }}>
+                      {t.text} <button type="button" onClick={() => removeTag(t.text)}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="tag-pills">
-              {form.tags.map(t => (
-                <span key={t.text} className="tag-pill" style={{ backgroundColor: t.color }}>
-                  {t.text} <b onClick={() => handleTagToggle(t)}>&times;</b>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <button type="submit" className="submit-btn" disabled={isSubmitting || isUploading}>
-            {isSubmitting ? (isEditMode ? 'Saving...' : 'Creating...') : isEditMode ? 'Save Changes' : 'Create Playlist'}
-          </button>
-        </form>
+            <button type="submit" className="submit-btn" disabled={loading}>
+              {loading ? 'Saving...' : isEditMode ? 'Save Changes' : 'Create Playlist'}
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+
+      {/* Color Picker Modal */}
+      {showColorPicker && (
+        <div className="color-picker-modal-backdrop" onClick={() => setShowColorPicker(false)}>
+          <div className="color-picker-modal" onClick={e => e.stopPropagation()}>
+            <h3>Pick a Color</h3>
+            <CirclePicker 
+              color={color} 
+              onChangeComplete={(c) => setColor(c.hex)}
+              colors={['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#795548', '#607d8b', '#000000']}
+              width="280px"
+            />
+            <button 
+              className="color-picker-done"
+              onClick={() => setShowColorPicker(false)}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

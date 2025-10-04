@@ -35,8 +35,13 @@ const api = axios.create({
   },
 });
 
-// Log all requests
+// ✅ ADD TOKEN TO EVERY REQUEST
 api.interceptors.request.use(request => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    request.headers.Authorization = `Bearer ${token}`;
+    console.log('🔑 Added token to request');
+  }
   console.log('🚀 API Request:', request.method.toUpperCase(), request.url);
   return request;
 });

@@ -7,3 +7,9 @@ dist/
 # Optional: OS or editor files
 .DS_Store
 *.log
+# Root .gitignore
+node_modules/
+.env
+uploads/
+*.log
+.DS_Store

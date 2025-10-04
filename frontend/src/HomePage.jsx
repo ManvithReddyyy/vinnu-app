@@ -181,75 +181,78 @@ function HomePage({ user, refreshKey, onEditPlaylist, onPlaylistDeleted, onViewP
                 Found {playlists.length} playlist{playlists.length !== 1 ? 's' : ''}
               </div>
               <div className="home-playlist-grid">
-                {playlists.map((pl) => {
-                  const isOwner = user && pl.ownerId?._id === user.id;
-                  const isLiked = user && Array.isArray(pl.likes) && pl.likes.includes(user.id);
-                  const likeCount = Array.isArray(pl.likes) ? pl.likes.length : 0;
+  {playlists.map((pl) => {
+    const isLiked = user && Array.isArray(pl.likes) && pl.likes.includes(user._id);
+    const likeCount = Array.isArray(pl.likes) ? pl.likes.length : 0;
 
-                  return (
-                    <div key={pl._id} className="playlist-card" onClick={() => onViewPlaylist(pl)}>
-                      <div className="playlist-cover">
-                        {pl.coverUrl ? (
-                          <img src={getImageUrl(pl.coverUrl)} alt={pl.title} />
-                        ) : (
-                          <span className="cover-icon">🎵</span>
-                        )}
-                      </div>
-                      <div className="playlist-info">
-                        <div className="playlist-title">{pl.title}</div>
-                        <div 
-                          className="playlist-owner" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (pl.ownerId?.username) {
-                              handleUserClick(pl.ownerId.username);
-                            }
-                          }}
-                          style={{ 
-                            cursor: pl.ownerId?.username ? 'pointer' : 'default',
-                            transition: 'color 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (pl.ownerId?.username) {
-                              e.target.style.color = '#111827';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.color = '';
-                          }}
-                        >
-                          By @{pl.ownerId?.username || '...'}
-                        </div>
-                        <div className="tag-pills-card">
-                          {pl.tags?.slice(0, 3).map((t, idx) => (
-                            <span 
-                              key={idx} 
-                              className="tag-pill-card" 
-                              style={{ backgroundColor: t.color || '#e0e7ff' }}
-                            >
-                              {t.text || t}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="card-actions" onClick={e => e.stopPropagation()}>
-                        <button 
-                          className={`like-btn ${isLiked ? 'liked' : ''}`} 
-                          onClick={() => handleLike(pl._id)}
-                        >
-                          ♥ {likeCount}
-                        </button>
-                        {isOwner && (
-                          <div className="owner-actions">
-                            <button className="edit-btn-card" onClick={() => onEditPlaylist(pl)}>Edit</button>
-                            <button className="delete-btn-card" onClick={() => handleDelete(pl._id)}>Delete</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+    return (
+      <div
+        key={pl._id}
+        className="card dashboard-card"
+        onClick={() => onViewPlaylist(pl)}
+        style={{ cursor: 'pointer' }}
+      >
+        <div className="playlist-cover-dash">
+          {pl.coverUrl ? (
+            <img src={getImageUrl(pl.coverUrl)} alt={pl.title} />
+          ) : (
+            <div className="cover-icon-dash">🎵</div>
+          )}
+        </div>
+
+        <div className="dashboard-card-info">
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
+            {pl.title}
+          </div>
+          
+          <div 
+            className="subtitle" 
+            style={{ margin: '4px 0 8px 0', fontSize: 13, cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (pl.ownerId?.username) {
+                handleUserClick(pl.ownerId.username);
+              }
+            }}
+          >
+            By @{pl.ownerId?.username || '...'}
+          </div>
+
+          {/* ✅ Just pastel colored text, no background */}
+          {pl.tags && pl.tags.length > 0 && (
+            <div style={{ fontSize: 11, marginBottom: 8 }}>
+              {pl.tags.slice(0, 3).map((t, idx) => (
+                <span key={idx}>
+                  <span style={{ color: t.color || '#9ca3af', fontWeight: '500' }}>
+                    {t.text || t}
+                  </span>
+                  {idx < Math.min(pl.tags.length, 3) - 1 && <span style={{ color: '#d1d5db' }}> · </span>}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 8 }}>
+            <span>👁 {pl.views || 0}</span>
+            <span style={{ marginLeft: 12 }}>🔗 {pl.clicks || 0}</span>
+            <span style={{ marginLeft: 12 }}>❤️ {likeCount}</span>
+          </div>
+        </div>
+
+        <div className="card-actions-dash" onClick={e => e.stopPropagation()}>
+          <button 
+            className={`like-btn ${isLiked ? 'liked' : ''}`} 
+            onClick={() => handleLike(pl._id)}
+            style={{ width: '100%' }}
+          >
+            ♥ {likeCount}
+          </button>
+        </div>
+      </div>
+    );
+  })}
+</div>
+
             </>
           )}
         </section>

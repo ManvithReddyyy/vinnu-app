@@ -4,31 +4,30 @@ import Dashboard from './Dashboard.jsx';
 import Navbar from './Navbar.jsx';
 import HomePage from './HomePage.jsx';
 import UserProfile from './UserProfile.jsx';
-import Friends from './Friends.jsx'; // ADDED
+import Friends from './Friends.jsx';
 import FAB from './FAB.jsx';
 import CreatePlaylistModal from './CreatePlaylistModal.jsx';
 import PlaylistDetailModal from './PlaylistDetailModal.jsx';
+import AdminPanel from './AdminPanel.jsx';
+import api from './api';
 
 // --- API base ---
 function getApiBase() {
   if (import.meta.env.DEV) {
-    // Check if we're accessing via IP (mobile)
     if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       return 'http://192.168.0.105:5000';
     }
-    return ''; // Use proxy for localhost
+    return '';
   }
   const env = import.meta.env.VITE_API_URL;
   if (env && /^https?:\/\/.+/.test(env)) return env;
   return 'http://localhost:5000';
 }
 
-// Add this after getApiBase function
 function getImageUrl(path) {
   if (!path) return '';
   if (path.startsWith('http')) return path;
   
-  // Check if we're on mobile (accessing via IP)
   if (window.location.hostname === '192.168.0.105') {
     return `http://192.168.0.105:5000${path}`;
   }
@@ -37,7 +36,7 @@ function getImageUrl(path) {
 }
 
 // --- Register Form ---
-function RegisterForm({ onNavigate }) {
+function RegisterForm({ onNavigate, onNeedsVerification }) {
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -85,7 +84,18 @@ function RegisterForm({ onNavigate }) {
         if (data?.field) setErrors(prev => ({ ...prev, [data.field]: data.message }));
         else setMessage(data?.message || 'Registration failed');
       } else {
-        setMessage('Registered successfully! Redirecting to login…');
+        if (data.needsVerification) {
+          console.log('✅ Registration successful, showing OTP form');
+          setMessage('✅ OTP sent to your email!');
+          
+          setTimeout(() => {
+            onNeedsVerification(data.email);
+          }, 1000);
+        } else {
+          setMessage('Registered successfully! Redirecting to login…');
+          setTimeout(() => onNavigate('login'), 1500);
+        }
+        
         setForm({
           firstName: '',
           lastName: '',
@@ -94,7 +104,6 @@ function RegisterForm({ onNavigate }) {
           password: '',
           confirmPassword: ''
         });
-        setTimeout(() => onNavigate('login'), 1500);
       }
     } catch (err) {
       console.error('Registration error:', err);
@@ -206,9 +215,125 @@ function RegisterForm({ onNavigate }) {
   );
 }
 
+// --- OTP Verification Form ---
+function OTPVerificationForm({ email, onNavigate }) {
+  const [otp, setOtp] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [resending, setResending] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (submitting) return;
+    
+    setMessage(null);
+    if (!otp || otp.length !== 6) {
+      setMessage('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data?.message || 'Verification failed');
+      } else {
+        setMessage('✅ Email verified successfully!');
+        setTimeout(() => onNavigate('login'), 1500);
+      }
+    } catch (err) {
+      console.error('Verification error:', err);
+      setMessage('Network error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resending) return;
+    
+    setResending(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch(`${getApiBase()}/api/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMessage('✅ New OTP sent to your email!');
+      } else {
+        setMessage(data?.message || 'Failed to resend OTP');
+      }
+    } catch (err) {
+      console.error('Resend error:', err);
+      setMessage('Network error');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  return (
+    <div className="centered-container">
+      <div className="card">
+        <h2 className="title">Verify Your Email</h2>
+        <p className="subtitle">Enter the 6-digit code sent to:</p>
+        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 20, color: '#000' }}>{email}</p>
+        
+        {message && <div className="message">{message}</div>}
+        
+        <form onSubmit={handleSubmit}>
+          <div className="grid">
+            <div className="full">
+              <label htmlFor="otp">OTP Code</label>
+              <input
+                id="otp"
+                name="otp"
+                type="text"
+                maxLength="6"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                style={{ textAlign: 'center', fontSize: 24, letterSpacing: 8, fontFamily: 'monospace' }}
+                autoFocus
+              />
+            </div>
+            <div className="full" style={{ marginTop: 6 }}>
+              <button type="submit" disabled={submitting}>
+                {submitting ? 'Verifying…' : 'Verify Email'}
+              </button>
+            </div>
+            <div className="full" style={{ marginTop: 12, textAlign: 'center', fontSize: 13, color: '#6b7280' }}>
+              Didn't receive the code?{' '}
+              <a 
+                href="#" 
+                onClick={(e) => { e.preventDefault(); handleResend(); }}
+                style={{ color: resending ? '#999' : '#000', fontWeight: 600 }}
+              >
+                {resending ? 'Sending...' : 'Resend OTP'}
+              </a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // --- Login Form ---
 function LoginForm({ onNavigate, onLoginSuccess }) {
-  const [form, setForm] = useState({ identifier: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' })
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const [errors, setErrors] = useState({});
@@ -220,7 +345,7 @@ function LoginForm({ onNavigate, onLoginSuccess }) {
 
   const validate = () => {
     const next = {};
-    if (!form.identifier.trim()) next.identifier = 'Email or username required';
+    if (!form.email.trim()) next.email = 'Email or username required';
     if (!form.password) next.password = 'Password required';
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -266,18 +391,19 @@ function LoginForm({ onNavigate, onLoginSuccess }) {
         <form onSubmit={handleSubmit}>
           <div className="grid">
             <div className="full">
-              <label htmlFor="identifier">Email or Username</label>
+              <label htmlFor="email">Email or Username</label>
               <input
-                id="identifier"
-                name="identifier"
-                value={form.identifier}
+                id="email"
+                name="email"
+                value={form.email}
                 onChange={updateField}
-                className={errors.identifier ? 'error' : ''}
-                aria-invalid={!!errors.identifier}
-                aria-describedby={errors.identifier ? 'identifier-error' : undefined}
+                className={errors.email ? 'error' : ''}
+                aria-invalid={!!errors.email}
+                aria-describedby={errors.email ? 'email-error' : undefined}
               />
-              {errors.identifier && <div id="identifier-error" className="error-text">{errors.identifier}</div>}
+              {errors.email && <div id="email-error" className="error-text">{errors.email}</div>}
             </div>
+
             <div className="full">
               <label htmlFor="password">Password</label>
               <input
@@ -317,6 +443,7 @@ export default function App() {
   const [viewingPlaylist, setViewingPlaylist] = useState(null);
   const [viewingUserProfile, setViewingUserProfile] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pendingVerification, setPendingVerification] = useState(null);
 
   const handleNavigate = (newView) => {
     console.log('🧭 Navigating to:', newView);
@@ -349,17 +476,22 @@ export default function App() {
     async function checkSession() {
       try {
         console.log('🔍 Checking session...');
-        const res = await fetch(`${getApiBase()}/api/auth/me`, { 
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
         
-        console.log('📡 Session check status:', res.status);
+        const token = localStorage.getItem('token');
         
-        if (res.ok) {
-          const userData = await res.json();
+        if (!token) {
+          console.log('❌ No token found in localStorage');
+          setUser(null);
+          setView('home');
+          return;
+        }
+        
+        console.log('🔑 Token found, fetching profile...');
+        
+        const res = await api.get('/profile');
+        
+        if (res.status === 200) {
+          const userData = res.data;
           console.log('✅ User authenticated:', userData.username);
           setUser(userData);
           
@@ -370,13 +502,10 @@ export default function App() {
           } else {
             setView('home');
           }
-        } else {
-          console.log('❌ No valid session');
-          setUser(null);
-          setView('home');
         }
       } catch (error) {
         console.error('❌ Session check failed:', error);
+        localStorage.removeItem('token');
         setUser(null);
         setView('home');
       }
@@ -395,6 +524,7 @@ export default function App() {
     } catch (error) {
       console.error('❌ Logout error:', error);
     }
+    localStorage.removeItem('token');
     setUser(null);
     setViewingUserProfile(null);
     setViewingPlaylist(null);
@@ -402,9 +532,14 @@ export default function App() {
     setView('home');
   }
 
-  function handleLogin(userData) { 
-    console.log('🎉 Login handler called with:', userData);
-    setUser(userData);
+  function handleLogin(data) { 
+    console.log('🎉 Login handler called with:', data);
+    
+    if (data.token) {
+      localStorage.setItem('token', data.token);
+    }
+    
+    setUser(data.user);
     setView('dashboard');
   }
   
@@ -425,7 +560,18 @@ export default function App() {
   }
 
   const renderContent = () => {
-    // Show user profile overlay if viewing a profile
+    if (pendingVerification) {
+      return (
+        <OTPVerificationForm
+          email={pendingVerification.email}
+          onNavigate={(view) => {
+            setPendingVerification(null);
+            setView(view);
+          }}
+        />
+      );
+    }
+
     if (viewingUserProfile && (view === 'home' || view === 'dashboard' || view === 'friends')) {
       if (!user) {
         return <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />;
@@ -468,7 +614,6 @@ export default function App() {
           <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
         );
       
-      // 👇 ADDED FRIENDS ROUTE 👇
       case 'friends':
         return user ? (
           <Friends 
@@ -478,11 +623,25 @@ export default function App() {
         ) : (
           <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
         );
-      // 👆 END 👆
+      
+      case 'admin':
+        return user ? (
+          <AdminPanel user={user} />
+        ) : (
+          <LoginForm onNavigate={setView} onLoginSuccess={handleLogin} />
+        );
         
       case 'register': 
         if (viewingUserProfile) setViewingUserProfile(null);
-        return <RegisterForm onNavigate={setView} />;
+        return (
+          <RegisterForm 
+            onNavigate={setView}
+            onNeedsVerification={(email) => {
+              console.log('📧 Setting pending verification for:', email);
+              setPendingVerification({ email });
+            }}
+          />
+        );
         
       case 'login': 
         if (viewingUserProfile) setViewingUserProfile(null);
@@ -508,7 +667,7 @@ export default function App() {
 
   return (
     <>
-      <Navbar user={user} onNavigate={handleNavigate} onLogout={logout} />
+      <Navbar user={user} onNavigate={handleNavigate} onLogout={logout} view={view} />
       <main className="main-content">{renderContent()}</main>
       {user && <FAB onClick={() => setIsCreateModalOpen(true)} />}
       {isCreateEditModalOpen && (

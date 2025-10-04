@@ -14,7 +14,7 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
   const [showPaperPlane, setShowPaperPlane] = useState(false);
   
   // Friend system states
-  const [friendStatus, setFriendStatus] = useState('none'); // 'none', 'pending', 'received', 'friends'
+  const [friendStatus, setFriendStatus] = useState('none'); // none, pending, received, friends
   const [isFriendLoading, setIsFriendLoading] = useState(false);
   const [canSeeSocials, setCanSeeSocials] = useState(false);
 
@@ -40,6 +40,7 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
         try {
           const followStatus = await api.get(`/users/${username}/following-status`);
           setIsFollowing(followStatus.data.isFollowing);
+          console.log('✅ Following status:', followStatus.data.isFollowing);
         } catch (err) {
           console.log('⚠️ Could not check following status');
         }
@@ -47,11 +48,23 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
         // Check friend status
         try {
           const friendStatusRes = await api.get(`/users/${username}/friend-status`);
-          setFriendStatus(friendStatusRes.data.status);
-          setCanSeeSocials(friendStatusRes.data.canSeeSocials);
-          console.log('✅ Friend status:', friendStatusRes.data.status);
+          const { isFriend, requestSent, requestReceived } = friendStatusRes.data;
+          
+          // Determine status
+          if (isFriend) {
+            setFriendStatus('friends');
+            setCanSeeSocials(true);
+          } else if (requestSent) {
+            setFriendStatus('pending');
+          } else if (requestReceived) {
+            setFriendStatus('received');
+          } else {
+            setFriendStatus('none');
+          }
+          
+          console.log('✅ Friend status:', { isFriend, requestSent, requestReceived });
         } catch (err) {
-          console.log('⚠️ Could not check friend status');
+          console.log('⚠️ Could not check friend status', err);
         }
       } catch (err) {
         console.error('❌ Failed to load user profile:', err);
@@ -66,18 +79,26 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
     }
   }, [username]);
 
+  // ✅ FIXED: Toggle between follow/unfollow
   const handleFollowToggle = async () => {
     if (isFollowLoading) return;
     
     setIsFollowLoading(true);
     try {
-      const response = await api.post(`/users/${username}/follow`);
-      setIsFollowing(response.data.isFollowing);
-      setFollowersCount(response.data.followersCount);
-      
-      if (response.data.isFollowing) {
+      if (isFollowing) {
+        // Unfollow
+        await api.post(`/users/${username}/unfollow`);
+        setIsFollowing(false);
+        setFollowersCount(prev => Math.max(0, prev - 1));
+        console.log('✅ Unfollowed');
+      } else {
+        // Follow
+        await api.post(`/users/${username}/follow`);
+        setIsFollowing(true);
+        setFollowersCount(prev => prev + 1);
         setShowPaperPlane(true);
         setTimeout(() => setShowPaperPlane(false), 1500);
+        console.log('✅ Followed');
       }
     } catch (error) {
       console.error('❌ Follow toggle failed:', error);
@@ -222,32 +243,41 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
             )}
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
               {/* Follow Button */}
-              <div style={{ position: 'relative', display: 'inline-block' }}>
-                <button
-                  onClick={handleFollowToggle}
-                  disabled={isFollowLoading}
-                  className={`action-button ${isFollowing ? 'secondary' : 'primary'}`}
-                >
-                  {isFollowLoading ? '...' : (isFollowing ? 'Following' : 'Follow')}
-                </button>
-                
-                {showPaperPlane && (
-                  <div className="paper-plane-animation">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={handleFollowToggle}
+                disabled={isFollowLoading}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  border: '1px solid',
+                  borderColor: isFollowing ? '#e5e7eb' : '#000',
+                  background: isFollowing ? '#fff' : '#000',
+                  color: isFollowing ? '#000' : '#fff',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  borderRadius: '4px'
+                }}
+              >
+                {isFollowLoading ? '...' : (isFollowing ? 'Following' : 'Follow')}
+              </button>
 
-              {/* Friend Button */}
+              {/* Friend Buttons */}
               {friendStatus === 'none' && (
                 <button
                   onClick={() => handleFriendAction('send')}
                   disabled={isFriendLoading}
-                  className="action-button primary"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    border: '1px solid #000',
+                    background: '#000',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    borderRadius: '4px'
+                  }}
                 >
                   {isFriendLoading ? '...' : '👥 Add Friend'}
                 </button>
@@ -257,7 +287,16 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
                 <button
                   onClick={() => handleFriendAction('cancel')}
                   disabled={isFriendLoading}
-                  className="action-button secondary"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    border: '1px solid #e5e7eb',
+                    background: '#fff',
+                    color: '#000',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    borderRadius: '4px'
+                  }}
                 >
                   {isFriendLoading ? '...' : '⏳ Request Sent'}
                 </button>
@@ -268,14 +307,32 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
                   <button
                     onClick={() => handleFriendAction('accept')}
                     disabled={isFriendLoading}
-                    className="action-button primary"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      border: '1px solid #000',
+                      background: '#000',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      borderRadius: '4px'
+                    }}
                   >
                     {isFriendLoading ? '...' : '✓ Accept'}
                   </button>
                   <button
                     onClick={() => handleFriendAction('reject')}
                     disabled={isFriendLoading}
-                    className="action-button secondary"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      border: '1px solid #e5e7eb',
+                      background: '#fff',
+                      color: '#000',
+                      cursor: 'pointer',
+                      fontWeight: '500',
+                      borderRadius: '4px'
+                    }}
                   >
                     ✕ Decline
                   </button>
@@ -286,7 +343,16 @@ function UserProfile({ username, onBack, onViewPlaylist, onViewUserProfile }) {
                 <button
                   onClick={() => handleFriendAction('remove')}
                   disabled={isFriendLoading}
-                  className="action-button secondary"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    border: '1px solid #e5e7eb',
+                    background: '#fff',
+                    color: '#000',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    borderRadius: '4px'
+                  }}
                 >
                   {isFriendLoading ? '...' : '✓ Friends'}
                 </button>
