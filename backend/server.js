@@ -21,14 +21,16 @@
   const app = express();
 
   // Middleware
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:4173',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:4173',
-    'http://192.168.0.105:5173',
-    'http://192.168.0.105:4173',
-  ];
+ const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:4173',
+  'http://192.168.0.105:5173',
+  'http://192.168.0.105:4173',
+  'https://vinnu-app.vercel.app' // ✅ Add this
+];
+
 
   app.use(cors({
     origin: function(origin, callback) {
