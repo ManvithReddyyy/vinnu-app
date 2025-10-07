@@ -7,7 +7,14 @@ const getApiBase = () => {
   console.log('🌐 Current hostname:', hostname);
   console.log('🌐 Environment:', import.meta.env.MODE);
   
-  // If accessing via IP address (mobile)
+  // ✅ PRODUCTION (Vercel deployment)
+  if (hostname.includes('vercel.app') || hostname.includes('your-custom-domain.com')) {
+    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://your-backend.onrender.com';
+    console.log('🚀 Production mode - API URL:', apiUrl);
+    return apiUrl;
+  }
+  
+  // If accessing via IP address (mobile testing)
   if (hostname === '192.168.0.105') {
     const apiUrl = 'http://192.168.0.105:5000';
     console.log('📱 Mobile mode - API URL:', apiUrl);
