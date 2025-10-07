@@ -21,66 +21,70 @@
   const app = express();
 
   // Middleware
- const allowedOrigins = [
+const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:4173',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:4173',
   'http://192.168.0.105:5173',
   'http://192.168.0.105:4173',
-  'https://vinnu-app.vercel.app',  // ✅ Without slash
-  'https://vinnu-app.vercel.app/'  // ✅ With slash
+  'https://vinnu-app.vercel.app',
+  'https://vinnu-aqbhcg0hw-manvith-reddys-projects.vercel.app', // ✅ Add preview URL
 ];
 
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // ✅ Check if origin ends with .vercel.app (allows all Vercel deployments)
+    if (origin && origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('❌ Origin not allowed:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
 
-  app.use(cors({
-    origin: function(origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log('❌ Origin not allowed:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  }));
+app.use(express.json());
+app.use(cookieParser());
+app.use(morgan('dev'));
 
-  app.use(express.json());
-  app.use(cookieParser());
-  app.use(morgan('dev'));
+// Uploads setup
+const UPLOAD_DIR = path.resolve('uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-  // Uploads setup
-  const UPLOAD_DIR = path.resolve('uploads');
-  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  //app.use('/uploads', express.static(UPLOAD_DIR));
-
-  // MongoDB
+// MongoDB
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/vinnu';
 
-  const PORT = process.env.PORT || 5000;
-  const HOST = process.env.HOST || '0.0.0.0';
+const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-  async function connectToDatabase() {
-    try {
-      await mongoose.connect(MONGO_URI);
-      console.log('✅ Connected to MongoDB');
-      
-      // Auto-verify old users (before email verification was added)
-      const result = await User.updateMany(
-        { isVerified: { $ne: true } },
-        { $set: { isVerified: true, verificationOTP: null, otpExpiry: null } }
-      );
-      if (result.modifiedCount > 0) {
-        console.log(`✅ Auto-verified ${result.modifiedCount} existing users`);
-      }
-    } catch (error) {
-      console.error('❌ MongoDB connection error:', error);
-      process.exit(1);
+async function connectToDatabase() {
+  try {
+    await mongoose.connect(MONGO_URI);
+    console.log('✅ Connected to MongoDB');
+    
+    // Auto-verify old users (before email verification was added)
+    const result = await User.updateMany(
+      { isVerified: { $ne: true } },
+      { $set: { isVerified: true, verificationOTP: null, otpExpiry: null } }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`✅ Auto-verified ${result.modifiedCount} existing users`);
     }
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error);
+    process.exit(1);
   }
+}
+
 
 
  const userSchema = new mongoose.Schema({
@@ -97,7 +101,6 @@ const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/vinnu';
     youtube: String
   },
   
-  // ✅ ADD THESE FIELDS
   followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -119,10 +122,8 @@ const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/vinnu';
 
 
 
-  // THIS LINE IS CRITICAL - DO NOT DELETE!
   const User = mongoose.model('User', userSchema);
 
-  // Playlist Schema stays the same - no changes needed
   const playlistSchema = new mongoose.Schema({
     ownerId: { 
       type: mongoose.Schema.Types.ObjectId, 

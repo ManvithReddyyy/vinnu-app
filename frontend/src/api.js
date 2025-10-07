@@ -8,8 +8,8 @@ const getApiBase = () => {
   console.log('🌐 Environment:', import.meta.env.MODE);
   
   // ✅ PRODUCTION (Vercel deployment)
-  if (hostname.includes('vercel.app') || hostname.includes('your-custom-domain.com')) {
-    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'https://your-backend.onrender.com';
+  if (hostname.includes('vercel.app')) {
+    const apiUrl = 'https://vinnu-app-1.onrender.com';
     console.log('🚀 Production mode - API URL:', apiUrl);
     return apiUrl;
   }
@@ -27,9 +27,9 @@ const getApiBase = () => {
     return ''; // Use Vite proxy
   }
   
-  // Fallback
-  console.log('⚠️ Unknown hostname, using localhost');
-  return 'http://localhost:5000';
+  // Fallback to production
+  console.log('⚠️ Unknown hostname, using production API');
+  return 'https://vinnu-app-1.onrender.com';
 };
 
 const apiBase = getApiBase();
